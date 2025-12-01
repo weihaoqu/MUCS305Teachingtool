@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { AppTab, AppModule, PnpMode } from '../types';
 
@@ -16,7 +17,7 @@ const EducationalContent: React.FC<Props> = ({ activeTab, module, pnpMode }) => 
       {activeTab === AppTab.DEFINITION && (
         <div className="space-y-6 animate-fadeIn">
           <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">
-             Formal Definition ({module === AppModule.NFA_TO_DFA ? 'Subset Construction' : (module === AppModule.PNP ? (pnpMode === PnpMode.SAT ? 'Boolean Satisfiability (SAT)' : 'Complexity Classes') : module)})
+             Formal Definition ({module === AppModule.NFA_TO_DFA ? 'Subset Construction' : (module === AppModule.PNP ? (pnpMode === PnpMode.SAT ? 'Boolean Satisfiability (SAT)' : 'Complexity Classes') : (module === AppModule.CFG ? 'Context-Free Grammar' : module))})
           </h2>
           
           {module === AppModule.DFA ? (
@@ -72,6 +73,18 @@ const EducationalContent: React.FC<Props> = ({ activeTab, module, pnpMode }) => 
                 <li><strong className="text-orange-700">q₀</strong>: Start state.</li>
                 <li><strong className="text-green-700">q_accept</strong>: The accepting state.</li>
                 <li><strong className="text-red-700">q_reject</strong>: The rejecting state.</li>
+              </ul>
+            </div>
+          ) : module === AppModule.CFG ? (
+            <div className="prose prose-slate max-w-none">
+              <p className="text-lg text-slate-600">
+                A <strong>Context-Free Grammar (CFG)</strong> is a 4-tuple, {'$(V, \\Sigma, R, S)$'}, consisting of:
+              </p>
+              <ul className="list-disc pl-6 space-y-2 mt-4 text-slate-700">
+                <li><strong className="text-blue-700">V</strong>: A finite set of Variables (or Non-terminals), e.g., {'$\\{S, A, B\\}$'}.</li>
+                <li><strong className="text-purple-700">Σ</strong>: A finite set of Terminals, e.g., {'$\\{0, 1\\}$'}, disjoint from V.</li>
+                <li><strong className="text-emerald-700">R</strong>: A finite set of Production Rules, where each rule is of the form {'$A \\rightarrow w$'}, where {'$A \\in V$'} and {'$w \\in (V \\cup \\Sigma)^*$'} (string of variables and terminals).</li>
+                <li><strong className="text-orange-700">S</strong>: The Start Variable, {'$S \\in V$'}.</li>
               </ul>
             </div>
           ) : module === AppModule.PNP ? (
@@ -157,6 +170,8 @@ const EducationalContent: React.FC<Props> = ({ activeTab, module, pnpMode }) => 
                ? "The PDA accepts if the input is empty and the machine is in an accept state (or by empty stack, depending on definition)."
                : module === AppModule.TM 
                ? "The TM accepts if it enters the Accept state. It rejects if it enters the Reject state. It loops if it never halts."
+               : module === AppModule.CFG
+               ? "A Derivation is a sequence of substitutions to generate a string. A Parse Tree represents the structure of this derivation pictorially."
                : module === AppModule.PNP
                ? (pnpMode === PnpMode.SAT ? "Cook-Levin Theorem: SAT is the 'original' NP-Complete problem. 3-SAT is hard, but 2-SAT is easy." : "In Graph Coloring, 'Checking' if no two adjacent nodes have the same color is fast (P). 'Finding' a valid coloring is hard (NP).")
                : module === AppModule.NFA_TO_DFA 
@@ -175,6 +190,7 @@ const EducationalContent: React.FC<Props> = ({ activeTab, module, pnpMode }) => 
               <h3 className="text-lg font-bold text-blue-700">
                 {module === AppModule.PDA ? "Memory & Context" : 
                  module === AppModule.TM ? "Universal Computation" :
+                 module === AppModule.CFG ? "Generative Power" :
                  module === AppModule.PNP ? "The Million Dollar Question" :
                  module === AppModule.NFA_TO_DFA ? "Equivalence of NFA & DFA" :
                  (module === AppModule.DFA ? "Determinism" : "Nondeterminism")}
@@ -184,6 +200,8 @@ const EducationalContent: React.FC<Props> = ({ activeTab, module, pnpMode }) => 
                   ? 'Unlike DFAs/NFAs which have limited memory, a PDA uses an infinite Stack (LIFO) to store information. This allows it to recognize Context-Free Languages (e.g., matching parentheses, palindromes) which regular expressions cannot handle.'
                   : module === AppModule.TM
                   ? 'A Turing Machine is the most powerful computational model. With an infinite tape that can be read and written to in any order, it can simulate any computer algorithm. This leads to the Church-Turing Thesis: anything computable can be computed by a Turing Machine.'
+                  : module === AppModule.CFG
+                  ? 'Context-Free Grammars are more powerful than Regular Expressions. They are essential in computer science for defining programming language syntax (compilers use parsers based on CFGs) and modeling data structures (HTML/XML).'
                   : module === AppModule.PNP
                   ? 'Is P = NP? This is one of the greatest unsolved problems in computer science. It asks whether every problem whose solution can be quickly verified can also be solved quickly. Most experts believe P ≠ NP, implying that some problems are inherently hard to solve.'
                   : module === AppModule.NFA_TO_DFA

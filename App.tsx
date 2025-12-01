@@ -1,14 +1,14 @@
 
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import DfaGraph from './components/DfaGraph';
 import SatVisualizer from './components/SatVisualizer';
+import CfgVisualizer from './components/CfgVisualizer';
 import ChatAssistant from './components/ChatAssistant';
 import EducationalContent from './components/EducationalContent';
 import ChallengePanel from './components/ChallengePanel';
 import LandingPage from './components/LandingPage';
-import { DfaConfig, AppTab, SimulationStep, Challenge, AppModule, Transition, DfaState, PnpMode, SatClause } from './types';
-import { Play, RotateCcw, SkipForward, Plus, Trash2, BookOpen, Calculator, MonitorPlay, Pause, Trophy, Home, GitFork, Layers, ArrowRightLeft, ArrowRight, Settings2, Database, HardDrive, Network, Check, X, Palette, Braces, Sparkles } from 'lucide-react';
+import { DfaConfig, AppTab, SimulationStep, Challenge, AppModule, Transition, DfaState, PnpMode, SatClause, CfgConfig, ParseTreeNode } from './types';
+import { Play, RotateCcw, SkipForward, Plus, Trash2, BookOpen, Calculator, MonitorPlay, Pause, Trophy, Home, GitFork, Layers, ArrowRightLeft, ArrowRight, Settings2, Database, HardDrive, Network, Check, X, Palette, Braces, Sparkles, Split, Wand2, Target, CheckCircle2, AlertCircle } from 'lucide-react';
 
 const INITIAL_DFA: DfaConfig = {
   states: [
@@ -97,12 +97,23 @@ const INITIAL_PNP: DfaConfig = {
     alphabet: []
 };
 
-// 3-SAT Problem: (A v B) ^ (!A v C) ^ (!B v !C)
+// 3-SAT Problem
 const INITIAL_SAT_CLAUSES: SatClause[] = [
   { id: 1, literals: [{ var: 'A', isNegated: false }, { var: 'B', isNegated: false }] },
   { id: 2, literals: [{ var: 'A', isNegated: true }, { var: 'C', isNegated: false }] },
   { id: 3, literals: [{ var: 'B', isNegated: true }, { var: 'C', isNegated: true }] },
 ];
+
+const INITIAL_CFG: CfgConfig = {
+    variables: ['S'],
+    terminals: ['0', '1'],
+    startVariable: 'S',
+    productions: [
+        { head: 'S', body: ['0', 'S', '1'] },
+        { head: 'S', body: ['ε'] }
+    ],
+    rawText: "S -> 0S1 | ε"
+};
 
 // Presets for SAT
 const SAT_PRESETS = {
@@ -135,6 +146,7 @@ const THEME_CLASSES: Record<AppModule, { header: string, icon: string, accent: s
     [AppModule.TM]: { header: 'bg-rose-900', icon: 'bg-rose-500', accent: 'bg-rose-600', light: 'bg-rose-100', text: 'text-rose-700', border: 'hover:border-rose-400' },
     [AppModule.PNP]: { header: 'bg-indigo-900', icon: 'bg-indigo-500', accent: 'bg-indigo-600', light: 'bg-indigo-100', text: 'text-indigo-700', border: 'hover:border-indigo-200' },
     [AppModule.NFA_TO_DFA]: { header: 'bg-amber-900', icon: 'bg-amber-500', accent: 'bg-amber-600', light: 'bg-amber-100', text: 'text-amber-700', border: 'hover:border-amber-400' },
+    [AppModule.CFG]: { header: 'bg-cyan-900', icon: 'bg-cyan-600', accent: 'bg-cyan-600', light: 'bg-cyan-100', text: 'text-cyan-700', border: 'hover:border-cyan-400' },
 };
 
 const App: React.FC = () => {
@@ -147,6 +159,8 @@ const App: React.FC = () => {
   const [pdaConfig, setPdaConfig] = useState<DfaConfig>(INITIAL_PDA);
   const [tmConfig, setTmConfig] = useState<DfaConfig>(INITIAL_TM);
   const [pnpConfig, setPnpConfig] = useState<DfaConfig>(INITIAL_PNP);
+  const [cfgConfig, setCfgConfig] = useState<CfgConfig>(INITIAL_CFG);
+  const cfgTextareaRef = useRef<HTMLTextAreaElement>(null);
   
   // PNP State
   const [pnpMode, setPnpMode] = useState<PnpMode>(PnpMode.GRAPH_COLORING);
@@ -161,6 +175,14 @@ const App: React.FC = () => {
   const [satAssignments, setSatAssignments] = useState<Record<string, boolean | null>>({ 'A': null, 'B': null, 'C': null });
   const [activeClauseIndex, setActiveClauseIndex] = useState<number | null>(null);
   const [isSatSolved, setIsSatSolved] = useState(false);
+
+  // CFG State
+  const [parseTree, setParseTree] = useState<ParseTreeNode | null>(null);
+  const [cfgSentence, setCfgSentence] = useState<{val: string, nodeId: string}[]>([]); // The current sentential form
+  const [nodeCounter, setNodeCounter] = useState(0);
+  const [cfgDemoQueue, setCfgDemoQueue] = useState<{varIndex: number, prodIndex: number}[]>([]);
+  const [cfgTarget, setCfgTarget] = useState<string>('');
+  const [selectedCfgNode, setSelectedCfgNode] = useState<{id: string, name: string, x: number, y: number} | null>(null);
 
   // NFA to DFA Conversion State
   const [targetDfaConfig, setTargetDfaConfig] = useState<DfaConfig>({ states: [], transitions: [], alphabet: [] });
@@ -395,6 +417,192 @@ const App: React.FC = () => {
       setSimIndex(0);
   };
 
+  // --- CFG Logic ---
+  const parseCfgText = (text: string) => {
+    const lines = text.split('\n').filter(l => l.trim() !== '');
+    const vars = new Set<string>();
+    const terms = new Set<string>();
+    const prods = [];
+    let startVar = '';
+
+    for (const line of lines) {
+        const [head, body] = line.split('->').map(s => s.trim());
+        if (!head || !body) continue;
+        if (!startVar) startVar = head;
+        vars.add(head);
+        
+        const alternatives = body.split('|').map(s => s.trim());
+        for (const alt of alternatives) {
+            // Split alt into tokens. Basic assumption: Uppercase = Var, others = term
+            const tokens = alt.split('').filter(c => c !== ' ');
+            const bodyTokens = tokens.map(t => {
+                if (/[A-Z]/.test(t) && t !== 'ε') {
+                    vars.add(t);
+                    return t;
+                } else {
+                    if(t !== 'ε') terms.add(t);
+                    return t;
+                }
+            });
+            prods.push({ head, body: bodyTokens });
+        }
+    }
+    
+    setCfgConfig({
+        variables: Array.from(vars),
+        terminals: Array.from(terms),
+        productions: prods,
+        startVariable: startVar,
+        rawText: text
+    });
+    
+    // Reset Tree
+    initCfgTree(startVar);
+  };
+
+  const initCfgTree = (start: string) => {
+      if(!start) return;
+      setParseTree({ id: 'root', name: start, isTerminal: false });
+      setCfgSentence([{ val: start, nodeId: 'root' }]);
+      setNodeCounter(0);
+      setCfgDemoQueue([]);
+      setSelectedCfgNode(null);
+  };
+
+  const applyCfgProduction = (nodeId: string, prodIndex: number, productionBody: string[]) => {
+      // 1. Update Parse Tree
+      const updateTree = (node: ParseTreeNode): ParseTreeNode => {
+          if (node.id === nodeId) {
+              const children = productionBody.map((sym, idx) => ({
+                  id: `${nodeId}-${nodeCounter}-${idx}`,
+                  name: sym,
+                  isTerminal: !cfgConfig.variables.includes(sym),
+              }));
+              setNodeCounter(prev => prev + 1); // simple increment
+              return { ...node, children };
+          }
+          if (node.children) {
+              return { ...node, children: node.children.map(updateTree) };
+          }
+          return node;
+      };
+      
+      if(parseTree) setParseTree(updateTree(parseTree));
+
+      // 2. Update Sentence
+      const newSentence: {val: string, nodeId: string}[] = [];
+      let replaced = false;
+      for (const item of cfgSentence) {
+          if (item.nodeId === nodeId && !replaced) {
+              // Expand
+              productionBody.forEach((sym, idx) => {
+                  if (sym !== 'ε') {
+                    newSentence.push({ val: sym, nodeId: `${nodeId}-${nodeCounter}-${idx}` });
+                  }
+              });
+              replaced = true;
+          } else {
+              newSentence.push(item);
+          }
+      }
+      setCfgSentence(newSentence);
+      setSelectedCfgNode(null); // Close popup
+  };
+
+  const handleCfgNodeClick = (nodeId: string, symbol: string, x: number, y: number) => {
+      // Only show menu for variables
+      if (cfgConfig.variables.includes(symbol)) {
+          setSelectedCfgNode({ id: nodeId, name: symbol, x, y });
+      }
+  };
+
+  const findCfgDerivation = (target: string) => {
+      // BFS Solver
+      const startVar = cfgConfig.startVariable;
+      const q = [{ 
+          sent: [startVar], 
+          history: [] as { varIndex: number, prodIndex: number }[] 
+      }];
+      
+      const visited = new Set<string>([startVar]);
+      const maxSteps = 2000; 
+      let steps = 0;
+
+      while(q.length > 0 && steps < maxSteps) {
+          steps++;
+          const { sent, history } = q.shift()!;
+          const currentStr = sent.join('');
+          
+          if (currentStr === target) {
+              return history;
+          }
+          
+          if (currentStr.length > target.length + 5) continue; // Bound
+
+          // Find leftmost variable
+          const varIndex = sent.findIndex(s => cfgConfig.variables.includes(s));
+          if (varIndex === -1) continue; // No variables left
+
+          const varName = sent[varIndex];
+          // Get productions for this variable
+          // IMPORTANT: The app applies production by index relative to the FILTERED list for that head
+          const relevantProds = cfgConfig.productions.filter(p => p.head === varName);
+          
+          relevantProds.forEach((prod, pIdx) => {
+              const nextSent = [
+                  ...sent.slice(0, varIndex),
+                  ...prod.body.filter(s => s !== 'ε'),
+                  ...sent.slice(varIndex + 1)
+              ];
+              const nextStr = nextSent.join('');
+              
+              if (!visited.has(nextStr)) {
+                  visited.add(nextStr);
+                  q.push({
+                      sent: nextSent,
+                      history: [...history, { varIndex, prodIndex: pIdx }]
+                  });
+              }
+          });
+      }
+      return null;
+  };
+
+  const handleCfgAutoSolve = () => {
+      initCfgTree(cfgConfig.startVariable);
+      // Wait for state update is tricky, so we just calculate path and assume init works synchronously enough for logic or use timeouts
+      // Actually state updates are async. We should probably reset logic then solve.
+      // Better: Reset, then immediately queue the solve steps.
+      setTimeout(() => {
+          const path = findCfgDerivation(cfgTarget);
+          if (path) {
+              setCfgDemoQueue(path);
+              setIsPlaying(true);
+          } else {
+              alert("Could not find a derivation for this target (too deep or impossible).");
+          }
+      }, 100);
+  };
+
+  const insertEpsilonCfg = () => {
+      const textarea = cfgTextareaRef.current;
+      if (textarea) {
+          const start = textarea.selectionStart;
+          const end = textarea.selectionEnd;
+          const newText = cfgConfig.rawText.substring(0, start) + 'ε' + cfgConfig.rawText.substring(end);
+          setCfgConfig(prev => ({ ...prev, rawText: newText }));
+          
+          // Focus back
+          setTimeout(() => {
+              textarea.focus();
+              textarea.setSelectionRange(start + 1, start + 1);
+          }, 0);
+      } else {
+          setCfgConfig(prev => ({ ...prev, rawText: prev.rawText + 'ε' }));
+      }
+  };
+
+
   // --- NFA to DFA Logic ---
   const startConversion = () => {
     const startNode = nfaConfig.states.find(s => s.isStart);
@@ -469,6 +677,30 @@ const App: React.FC = () => {
   // --- Simulation Engine ---
   const stepSimulation = useCallback(() => {
     if (currentModule === AppModule.NFA_TO_DFA) return; 
+
+    // CFG Demo Step
+    if (currentModule === AppModule.CFG) {
+        if (cfgDemoQueue.length > 0) {
+            const step = cfgDemoQueue[0];
+            const item = cfgSentence[step.varIndex];
+            if (item && cfgConfig.variables.includes(item.val)) {
+                // Find rule relative to the variable
+                const relevantProds = cfgConfig.productions.filter(p => p.head === item.val);
+                const prod = relevantProds[step.prodIndex];
+                if (prod) {
+                    applyCfgProduction(item.nodeId, step.prodIndex, prod.body);
+                    setCfgDemoQueue(prev => prev.slice(1));
+                } else {
+                    setIsPlaying(false);
+                }
+            } else {
+                 setIsPlaying(false);
+            }
+        } else {
+            setIsPlaying(false);
+        }
+        return;
+    }
 
     // PNP Backtracking Step
     if (currentModule === AppModule.PNP) {
@@ -610,7 +842,7 @@ const App: React.FC = () => {
     } else {
       setCurrentSimStates([]); setSimResult('REJECTED'); setIsPlaying(false);
     }
-  }, [activeConfig, inputString, simIndex, currentSimStates, currentModule, stack, tape, head, getEpsilonClosure, solveHistory, pnpMode]);
+  }, [activeConfig, inputString, simIndex, currentSimStates, currentModule, stack, tape, head, getEpsilonClosure, solveHistory, pnpMode, cfgDemoQueue, cfgConfig, cfgSentence]);
 
   useEffect(() => {
     let interval: number;
@@ -639,6 +871,10 @@ const App: React.FC = () => {
              setIsSatSolved(false);
         }
     }
+    if (currentModule === AppModule.CFG) {
+        initCfgTree(cfgConfig.startVariable);
+        setCfgDemoQueue([]);
+    }
   };
 
   const handleStartModule = (module: AppModule) => {
@@ -648,6 +884,7 @@ const App: React.FC = () => {
       setActiveTab(AppTab.VISUALIZER);
       setInputString(module === AppModule.PDA ? '0011' : (module === AppModule.TM ? '0011' : '01'));
       if (module === AppModule.NFA_TO_DFA) resetConversion();
+      if (module === AppModule.CFG) parseCfgText(cfgConfig.rawText);
   };
 
   const handleStartChallenge = (challenge: Challenge) => {
@@ -660,7 +897,11 @@ const App: React.FC = () => {
           setSatAssignments(initial);
           resetSimulation();
       }
-      // For other modules, the challenge panel mostly guides the user construction
+      if (challenge.module === AppModule.CFG && challenge.cfgTarget) {
+          setCfgConfig(prev => ({ ...prev, rawText: "S -> " })); // Reset or let them edit
+          initCfgTree('S');
+          setCfgTarget(challenge.cfgTarget);
+      }
   };
 
   // --- Editor Helpers ---
@@ -719,10 +960,11 @@ const App: React.FC = () => {
                currentModule === AppModule.PDA ? <Layers size={20}/> :
                currentModule === AppModule.NFA ? <GitFork size={20}/> :
                currentModule === AppModule.PNP ? <Network size={20}/> :
+               currentModule === AppModule.CFG ? <Split size={20}/> :
                <Play size={20}/>}
             </div>
             <h1 className="text-lg font-bold tracking-tight hidden md:block">
-              {currentModule === AppModule.PDA ? 'Pushdown Automata' : (currentModule === AppModule.NFA ? 'NFA Visualizer' : (currentModule === AppModule.NFA_TO_DFA ? 'NFA → DFA' : (currentModule === AppModule.TM ? 'Turing Machine' : (currentModule === AppModule.PNP ? 'P vs NP' : 'DFA Master'))))}
+              {currentModule === AppModule.PDA ? 'Pushdown Automata' : (currentModule === AppModule.NFA ? 'NFA Visualizer' : (currentModule === AppModule.NFA_TO_DFA ? 'NFA → DFA' : (currentModule === AppModule.TM ? 'Turing Machine' : (currentModule === AppModule.PNP ? 'P vs NP' : (currentModule === AppModule.CFG ? 'Context-Free Grammar' : 'DFA Master')))))}
             </h1>
           </div>
         </div>
@@ -799,12 +1041,13 @@ const App: React.FC = () => {
             <>
                 <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur p-3 rounded-lg shadow border border-slate-200">
                     <div className="flex items-center gap-3 mb-2">
-                    {currentModule !== AppModule.PNP ? (
+                    {currentModule !== AppModule.PNP && currentModule !== AppModule.CFG ? (
                         <span className={`px-2 py-1 rounded text-xs font-bold ${
                             simResult === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-700' :
                             simResult === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'
                         }`}>{simResult}</span>
                     ) : (
+                        currentModule === AppModule.PNP ? (
                         <span className={`px-2 py-1 rounded text-xs font-bold ${
                             pnpMode === PnpMode.GRAPH_COLORING ? (
                                 verificationResult === 'valid' ? 'bg-emerald-100 text-emerald-700' :
@@ -817,9 +1060,14 @@ const App: React.FC = () => {
                                 ? (verificationResult ? (verificationResult === 'valid' ? 'Valid Coloring' : 'Conflict Found') : 'Unverified') 
                                 : (isSatSolved ? 'Formula Satisfied!' : 'SAT Solver')}
                         </span>
+                        ) : (
+                           <span className={`px-2 py-1 rounded text-xs font-bold ${cfgTarget && cfgSentence.map(i=>i.val).join('') === cfgTarget ? 'bg-emerald-100 text-emerald-700' : 'bg-cyan-100 text-cyan-700'}`}>
+                               {cfgTarget && cfgSentence.map(i=>i.val).join('') === cfgTarget ? 'Success!' : 'Derivation'}
+                           </span>
+                        )
                     )}
                     
-                    {currentModule !== AppModule.PNP && <span className="font-mono text-sm">State: <span className={`font-bold ${theme.text}`}>{currentSimStates.join(', ') || '∅'}</span></span>}
+                    {currentModule !== AppModule.PNP && currentModule !== AppModule.CFG && <span className="font-mono text-sm">State: <span className={`font-bold ${theme.text}`}>{currentSimStates.join(', ') || '∅'}</span></span>}
                     </div>
 
                     {currentModule === AppModule.PDA && (
@@ -851,7 +1099,7 @@ const App: React.FC = () => {
                         </div>
                     )}
 
-                    {simIndex >= 0 && currentModule !== AppModule.TM && currentModule !== AppModule.PNP && (
+                    {simIndex >= 0 && currentModule !== AppModule.TM && currentModule !== AppModule.PNP && currentModule !== AppModule.CFG && (
                     <div className="mt-2 font-mono text-lg bg-slate-100 p-2 rounded flex gap-1 justify-center max-w-[200px] overflow-x-auto">
                         {inputString.split('').map((c, i) => (
                         <span key={i} className={`w-6 text-center ${i === simIndex ? 'bg-yellow-400 font-bold' : i < simIndex ? 'text-slate-400' : 'text-slate-800'}`}>{c}</span>
@@ -862,6 +1110,21 @@ const App: React.FC = () => {
                     {currentModule === AppModule.PNP && pnpMode === PnpMode.GRAPH_COLORING && (
                         <div className="text-xs text-slate-500 mt-1 max-w-[150px]">
                             Select a color on the right, then click nodes to paint.
+                        </div>
+                    )}
+                    
+                    {currentModule === AppModule.CFG && cfgTarget && (
+                        <div className="mt-2 flex items-center gap-2 bg-white/50 rounded px-2 py-1 text-sm border border-slate-200">
+                           <Target size={14} className="text-cyan-600"/>
+                           <span className="text-slate-500 text-xs font-bold uppercase">Target:</span>
+                           <span className="font-mono font-bold text-slate-700 tracking-wider">{cfgTarget}</span>
+                           {cfgSentence.map(i=>i.val).join('') === cfgTarget ? (
+                               <CheckCircle2 size={16} className="text-emerald-500 ml-auto"/>
+                           ) : (
+                               <div className="ml-auto text-[10px] text-slate-400">
+                                  {cfgSentence.map(i=>i.val).join('').length > cfgTarget.length ? 'Too Long' : 'Typing...'}
+                               </div>
+                           )}
                         </div>
                     )}
                 </div>
@@ -888,6 +1151,78 @@ const App: React.FC = () => {
                             </div>
                         )}
                     </div>
+                ) : currentModule === AppModule.CFG ? (
+                    <div className="relative w-full h-full flex flex-col">
+                        <div className="flex-1 bg-slate-50 relative overflow-hidden" onClick={() => setSelectedCfgNode(null)}>
+                            <CfgVisualizer data={parseTree} onNodeClick={handleCfgNodeClick} />
+                            
+                            {/* Popup Menu for CFG Derivation */}
+                            {selectedCfgNode && (
+                                <div 
+                                    className="fixed z-50 bg-white rounded-lg shadow-xl border border-slate-200 p-2 min-w-[120px] animate-fadeIn"
+                                    style={{ 
+                                        left: selectedCfgNode.x, 
+                                        top: selectedCfgNode.y > window.innerHeight - 300 ? 'auto' : selectedCfgNode.y,
+                                        bottom: selectedCfgNode.y > window.innerHeight - 300 ? (window.innerHeight - selectedCfgNode.y + 60) : 'auto'
+                                    }}
+                                >
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-2 px-2 border-b border-slate-100 pb-1">
+                                        Expand {selectedCfgNode.name}
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        {cfgConfig.productions
+                                            .filter(p => p.head === selectedCfgNode.name)
+                                            .map((p, idx) => (
+                                            <button 
+                                                key={idx}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    // Need the index relative to filtered list for consistency with simulation logic?
+                                                    // applyCfgProduction expects index relative to the variable's productions
+                                                    const relativeIndex = cfgConfig.productions.filter(pr => pr.head === selectedCfgNode.name).indexOf(p);
+                                                    applyCfgProduction(selectedCfgNode.id, relativeIndex, p.body);
+                                                }}
+                                                className="text-left px-3 py-1.5 text-sm hover:bg-cyan-50 text-slate-700 rounded transition-colors font-mono"
+                                            >
+                                                → {p.body.join('')}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="h-24 bg-white border-t border-slate-200 p-4 flex flex-col items-center justify-center shadow-lg shrink-0">
+                            <div className="text-xs text-slate-500 font-bold uppercase mb-2">Current String (Sentential Form)</div>
+                            <div className="flex gap-2 font-mono text-lg overflow-x-auto max-w-full px-4">
+                                {cfgSentence.map((item, idx) => {
+                                    const isVar = cfgConfig.variables.includes(item.val);
+                                    return (
+                                        <div key={idx} className="relative group">
+                                            <span 
+                                                className={`px-2 py-1 rounded cursor-default ${isVar ? 'bg-cyan-100 text-cyan-800 border border-cyan-300 font-bold cursor-pointer hover:bg-cyan-200' : 'text-slate-700'}`}
+                                            >
+                                                {item.val}
+                                            </span>
+                                            {/* Dropdown for Variables (Legacy/Fallback) */}
+                                            {isVar && (
+                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-32 bg-white rounded shadow-xl border border-slate-200 hidden group-hover:block z-50">
+                                                    {cfgConfig.productions.filter(p => p.head === item.val).map((p, pIdx) => (
+                                                        <button 
+                                                            key={pIdx}
+                                                            onClick={() => applyCfgProduction(item.nodeId, pIdx, p.body)}
+                                                            className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 border-b border-slate-100 last:border-0"
+                                                        >
+                                                            → {p.body.join('')}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    </div>
                 ) : (
                     <DfaGraph 
                         config={activeConfig} 
@@ -899,6 +1234,8 @@ const App: React.FC = () => {
                     />
                 )}
                 
+                {/* Control Bar */}
+                {/* Always show Control Bar unless NFA_TO_DFA split view */}
                 <div className="h-20 bg-white border-t border-slate-200 flex items-center px-6 gap-4 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
                 
                 {currentModule === AppModule.PNP ? (
@@ -918,6 +1255,28 @@ const App: React.FC = () => {
                              {isPlaying ? `Backtracking Step: ${simIndex}` : (verificationResult ? `Result: ${verificationResult.toUpperCase()}` : 'Ready')}
                          </div>
                      </div>
+                ) : currentModule === AppModule.CFG ? (
+                    <div className="flex gap-4 items-center w-full">
+                        <div className="flex items-center gap-2 flex-1">
+                            <span className="text-xs font-bold text-slate-500 uppercase">Target:</span>
+                            <input 
+                                type="text" 
+                                value={cfgTarget} 
+                                onChange={(e) => setCfgTarget(e.target.value)} 
+                                placeholder="e.g. 0011" 
+                                className="border border-slate-300 rounded px-2 py-1.5 font-mono text-sm w-32 focus:ring-2 focus:ring-cyan-500 outline-none" 
+                            />
+                        </div>
+                        
+                        <button onClick={handleCfgAutoSolve} disabled={!cfgTarget || isPlaying} className="px-4 py-2 bg-cyan-600 text-white rounded text-sm font-bold flex items-center gap-2 hover:bg-cyan-700 disabled:opacity-50 whitespace-nowrap">
+                            <Wand2 size={16}/> Solve for me
+                        </button>
+                        <button onClick={() => { initCfgTree(cfgConfig.startVariable); setIsPlaying(false); }} className="p-2 border border-slate-300 text-slate-600 rounded hover:bg-slate-100" title="Reset"><RotateCcw size={20}/></button>
+                        
+                        <div className="ml-auto hidden xl:block text-xs text-slate-400 italic">
+                            Click tree nodes to expand manually, or auto-solve.
+                        </div>
+                    </div>
                 ) : (
                     <>
                         <input type="text" value={inputString} onChange={(e) => { setInputString(e.target.value); resetSimulation(); }} placeholder="Input..." className="border border-slate-300 rounded px-3 py-2 font-mono w-40 focus:ring-2 focus:ring-blue-500 outline-none" />
@@ -939,7 +1298,22 @@ const App: React.FC = () => {
            <div className="flex-1 overflow-hidden relative flex flex-col">
              
              {/* Challenge Mode */}
-             {activeTab === AppTab.CHALLENGES && <ChallengePanel dfa={activeConfig} module={currentModule} onStartChallenge={handleStartChallenge} onAddState={addStateWithId} onDeleteState={deleteState} onAddTransition={addTransitionExplicit} onDeleteTransition={deleteTransition} onToggleAccept={toggleAcceptState} />}
+             {activeTab === AppTab.CHALLENGES && (
+                 <ChallengePanel 
+                    dfa={activeConfig} 
+                    module={currentModule} 
+                    onStartChallenge={handleStartChallenge} 
+                    onAddState={addStateWithId} 
+                    onDeleteState={deleteState} 
+                    onAddTransition={addTransitionExplicit} 
+                    onDeleteTransition={deleteTransition} 
+                    onToggleAccept={toggleAcceptState}
+                    // CFG Props
+                    cfgText={cfgConfig.rawText}
+                    onCfgTextChange={(text) => setCfgConfig(prev => ({ ...prev, rawText: text }))}
+                    onCfgUpdate={() => parseCfgText(cfgConfig.rawText)}
+                 />
+             )}
              
              {/* Visualizer Mode (Editor) */}
              {activeTab === AppTab.VISUALIZER && (
@@ -948,7 +1322,7 @@ const App: React.FC = () => {
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="font-bold text-slate-800 flex items-center gap-2">
                                 <Settings2 size={18}/> 
-                                {isSplitView ? 'Editor' : `Edit ${currentModule === AppModule.PNP ? 'Graph' : currentModule}`}
+                                {isSplitView ? 'Editor' : `Edit ${currentModule === AppModule.PNP ? 'Graph' : (currentModule === AppModule.CFG ? 'Grammar' : currentModule)}`}
                             </h2>
                         </div>
 
@@ -989,7 +1363,7 @@ const App: React.FC = () => {
                         )}
                         
                         {/* Editor Controls for Automata/Graph */}
-                        {!(currentModule === AppModule.PNP && pnpMode === PnpMode.SAT) && (
+                        {!(currentModule === AppModule.PNP && pnpMode === PnpMode.SAT) && currentModule !== AppModule.CFG && (
                             <>
                             {currentModule === AppModule.PNP && pnpMode === PnpMode.GRAPH_COLORING && (
                                 <div className="mb-6 bg-indigo-50 p-3 rounded-lg border border-indigo-100">
@@ -1069,6 +1443,43 @@ const App: React.FC = () => {
                                 </div>
                             </div>
                             </>
+                        )}
+                        
+                        {/* CFG Editor */}
+                        {currentModule === AppModule.CFG && (
+                            <div className="flex flex-col h-full pb-4">
+                                <div className="flex items-center justify-between mb-2">
+                                     <h3 className="text-xs font-bold text-slate-500 uppercase">Production Rules</h3>
+                                     <button 
+                                         onClick={insertEpsilonCfg}
+                                         className="text-xs px-2 py-1 bg-slate-100 border border-slate-300 rounded hover:bg-slate-200 font-mono text-cyan-700"
+                                         title="Insert Epsilon"
+                                     >
+                                         +ε
+                                     </button>
+                                </div>
+                                <p className="text-[10px] text-slate-400 mb-2">Format: S -{'>'} 0S1 | ε</p>
+                                <textarea 
+                                    ref={cfgTextareaRef}
+                                    value={cfgConfig.rawText}
+                                    onChange={(e) => {
+                                        setCfgConfig(prev => ({ ...prev, rawText: e.target.value }));
+                                    }}
+                                    className="flex-1 w-full p-2 border border-slate-300 rounded font-mono text-sm resize-none focus:ring-2 focus:ring-cyan-500 outline-none"
+                                />
+                                <button 
+                                    onClick={() => parseCfgText(cfgConfig.rawText)}
+                                    className="mt-2 w-full py-2 bg-cyan-600 text-white rounded font-bold hover:bg-cyan-700 transition-colors"
+                                >
+                                    Update Grammar & Reset
+                                </button>
+                                <button 
+                                    onClick={() => initCfgTree(cfgConfig.startVariable)}
+                                    className="mt-2 w-full py-2 bg-white border border-slate-300 text-slate-600 rounded font-medium hover:bg-slate-50 transition-colors"
+                                >
+                                    <RotateCcw size={14} className="inline mr-1"/> Reset Tree
+                                </button>
+                            </div>
                         )}
                         
                         {/* SAT Presets */}

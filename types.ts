@@ -52,7 +52,8 @@ export enum AppModule {
   PDA = 'PDA',
   NFA_TO_DFA = 'NFA_TO_DFA',
   TM = 'TM',
-  PNP = 'PNP'
+  PNP = 'PNP',
+  CFG = 'CFG'
 }
 
 export enum PnpMode {
@@ -70,6 +71,26 @@ export interface TestCase {
   expected: boolean;
 }
 
+export interface CfgProduction {
+  head: string;
+  body: string[]; // e.g. ['0', 'S', '1']
+}
+
+export interface CfgConfig {
+  variables: string[];
+  terminals: string[];
+  productions: CfgProduction[];
+  startVariable: string;
+  rawText: string; // To persist the editor state
+}
+
+export interface ParseTreeNode {
+  id: string;
+  name: string; // The symbol
+  children?: ParseTreeNode[];
+  isTerminal: boolean;
+}
+
 export interface Challenge {
   id: string;
   title: string;
@@ -80,5 +101,6 @@ export interface Challenge {
   satConfig?: {
     vars: string[];
     clauses: SatClause[];
-  }
+  };
+  cfgTarget?: string; // For CFG challenges, the target string to derive
 }
