@@ -1,0 +1,5 @@
+{
+  "name": "mucs305",
+  "description": "An interactive educational platform for learning Deterministic Finite Automata (DFA) with real-time visualization, simulation, and an AI teaching assistant.",
+  "requestFramePermissions": []
+}
