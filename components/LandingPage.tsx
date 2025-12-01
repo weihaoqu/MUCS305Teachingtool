@@ -1,6 +1,7 @@
 
+
 import React from 'react';
-import { ArrowRight, Binary, GitFork, School, Layers, ArrowRightLeft, HardDrive, Network, Split } from 'lucide-react';
+import { ArrowRight, Binary, GitFork, School, Layers, ArrowRightLeft, HardDrive, Network, Split, Scale } from 'lucide-react';
 import { AppModule } from '../types';
 
 interface Props {
@@ -31,7 +32,7 @@ const LandingPage: React.FC<Props> = ({ onStart }) => {
         </div>
 
         {/* Modules Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full mx-auto mt-12 text-left">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 w-full mx-auto mt-12 text-left">
           {/* Module 1: DFA */}
           <div 
             onClick={() => onStart(AppModule.DFA)}
@@ -174,6 +175,27 @@ const LandingPage: React.FC<Props> = ({ onStart }) => {
                 Complexity Theory! Explore the Graph Coloring problem, understand NP-Completeness, and visualize Backtracking algorithms.
               </p>
               <div className="flex items-center text-indigo-600 font-bold group-hover:translate-x-2 transition-transform text-sm">
+                Start Module <ArrowRight size={18} className="ml-2" />
+              </div>
+            </div>
+          </div>
+
+          {/* Module 8: SMT Solver */}
+          <div 
+            onClick={() => onStart(AppModule.SMT)}
+            className="group bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-xl hover:border-fuchsia-400 transition-all cursor-pointer relative overflow-hidden flex flex-col"
+          >
+             <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-fuchsia-50 to-fuchsia-100 rounded-bl-[100px] -mr-8 -mt-8 transition-transform group-hover:scale-110 opacity-50"></div>
+
+             <div className="relative z-10 flex-1 flex flex-col">
+              <div className="w-14 h-14 bg-fuchsia-600 text-white rounded-2xl flex items-center justify-center mb-6 shadow-md group-hover:rotate-6 transition-transform">
+                <Scale size={28} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 mb-3 group-hover:text-fuchsia-700 transition-colors">SMT Solver</h3>
+              <p className="text-slate-600 mb-6 text-sm leading-relaxed flex-1">
+                Satisfiability Modulo Theories. Visualize Lazy SMT, where Boolean logic meets Mathematical Theory (Linear Arithmetic).
+              </p>
+              <div className="flex items-center text-fuchsia-600 font-bold group-hover:translate-x-2 transition-transform text-sm">
                 Start Module <ArrowRight size={18} className="ml-2" />
               </div>
             </div>

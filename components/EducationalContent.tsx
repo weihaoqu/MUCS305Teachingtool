@@ -17,7 +17,7 @@ const EducationalContent: React.FC<Props> = ({ activeTab, module, pnpMode }) => 
       {activeTab === AppTab.DEFINITION && (
         <div className="space-y-6 animate-fadeIn">
           <h2 className="text-2xl font-bold text-slate-800 border-b pb-2">
-             Formal Definition ({module === AppModule.NFA_TO_DFA ? 'Subset Construction' : (module === AppModule.PNP ? (pnpMode === PnpMode.SAT ? 'Boolean Satisfiability (SAT)' : 'Complexity Classes') : (module === AppModule.CFG ? 'Context-Free Grammar' : module))})
+             Formal Definition ({module === AppModule.NFA_TO_DFA ? 'Subset Construction' : (module === AppModule.PNP ? (pnpMode === PnpMode.SAT ? 'Boolean Satisfiability (SAT)' : 'Complexity Classes') : (module === AppModule.CFG ? 'Context-Free Grammar' : (module === AppModule.SMT ? 'Satisfiability Modulo Theories' : module)))})
           </h2>
           
           {module === AppModule.DFA ? (
@@ -86,6 +86,25 @@ const EducationalContent: React.FC<Props> = ({ activeTab, module, pnpMode }) => 
                 <li><strong className="text-emerald-700">R</strong>: A finite set of Production Rules, where each rule is of the form {'$A \\rightarrow w$'}, where {'$A \\in V$'} and {'$w \\in (V \\cup \\Sigma)^*$'} (string of variables and terminals).</li>
                 <li><strong className="text-orange-700">S</strong>: The Start Variable, {'$S \\in V$'}.</li>
               </ul>
+            </div>
+          ) : module === AppModule.SMT ? (
+            <div className="prose prose-slate max-w-none">
+              <p className="text-lg text-slate-600">
+                <strong>SMT (Satisfiability Modulo Theories)</strong> extends SAT solving by supporting formulas from "theories" like Linear Integer Arithmetic, Arrays, and Bit Vectors.
+              </p>
+              
+              <div className="bg-fuchsia-50 border-l-4 border-fuchsia-500 p-4 my-4">
+                 <h3 className="font-bold text-fuchsia-900">Lazy SMT (DPLL(T))</h3>
+                 <p className="text-fuchsia-800 text-sm mt-1">
+                   Modern SMT solvers work by "abstracting" the formula into Boolean variables and letting a SAT solver handle the logic structure.
+                 </p>
+                 <ol className="list-decimal pl-5 mt-2 text-fuchsia-800 text-sm space-y-1">
+                   <li><strong>Abstraction</strong>: Replace constraints (e.g., {'$x > 3$'}) with boolean variables (e.g., {'$B_1$'}).</li>
+                   <li><strong>SAT Solving</strong>: The SAT solver proposes a truth assignment for these variables (e.g., {'$B_1 = True$'}).</li>
+                   <li><strong>Theory Check</strong>: A specialized "Theory Solver" checks if the active constraints are consistent (e.g., is {'$x > 3 \land x < 2$'} possible?).</li>
+                   <li><strong>Learning</strong>: If inconsistent, the Theory Solver adds a "Conflict Clause" to exclude that combination.</li>
+                 </ol>
+              </div>
             </div>
           ) : module === AppModule.PNP ? (
              pnpMode === PnpMode.SAT ? (
@@ -174,6 +193,8 @@ const EducationalContent: React.FC<Props> = ({ activeTab, module, pnpMode }) => 
                ? "A Derivation is a sequence of substitutions to generate a string. A Parse Tree represents the structure of this derivation pictorially."
                : module === AppModule.PNP
                ? (pnpMode === PnpMode.SAT ? "Cook-Levin Theorem: SAT is the 'original' NP-Complete problem. 3-SAT is hard, but 2-SAT is easy." : "In Graph Coloring, 'Checking' if no two adjacent nodes have the same color is fast (P). 'Finding' a valid coloring is hard (NP).")
+               : module === AppModule.SMT
+               ? "SMT Solvers work by checking the 'Boolean Skeleton' first. If the skeleton is true, they ask the Theory Solver: 'Is this mathematically possible?'"
                : module === AppModule.NFA_TO_DFA 
                ? "The resulting DFA simulates the NFA by tracking all possible states the NFA could be in simultaneously."
                : "The machine accepts w if a valid path leads to an accept state."}
@@ -192,6 +213,7 @@ const EducationalContent: React.FC<Props> = ({ activeTab, module, pnpMode }) => 
                  module === AppModule.TM ? "Universal Computation" :
                  module === AppModule.CFG ? "Generative Power" :
                  module === AppModule.PNP ? "The Million Dollar Question" :
+                 module === AppModule.SMT ? "Automated Reasoning" :
                  module === AppModule.NFA_TO_DFA ? "Equivalence of NFA & DFA" :
                  (module === AppModule.DFA ? "Determinism" : "Nondeterminism")}
               </h3>
@@ -204,6 +226,8 @@ const EducationalContent: React.FC<Props> = ({ activeTab, module, pnpMode }) => 
                   ? 'Context-Free Grammars are more powerful than Regular Expressions. They are essential in computer science for defining programming language syntax (compilers use parsers based on CFGs) and modeling data structures (HTML/XML).'
                   : module === AppModule.PNP
                   ? 'Is P = NP? This is one of the greatest unsolved problems in computer science. It asks whether every problem whose solution can be quickly verified can also be solved quickly. Most experts believe P ≠ NP, implying that some problems are inherently hard to solve.'
+                  : module === AppModule.SMT
+                  ? 'SMT solvers are the engine behind modern Formal Verification, Software Testing, and Constraint Satisfaction. By combining fast SAT solvers with domain-specific math, they can prove code correctness or find security bugs efficiently.'
                   : module === AppModule.NFA_TO_DFA
                   ? 'Every NFA has an equivalent DFA. While NFAs are easier to design (allowing guesses and epsilon moves), DFAs are easier to implement in hardware or code. The trade-off is that the DFA might have exponentially more states ($2^n$) than the NFA.'
                   : (module === AppModule.DFA 

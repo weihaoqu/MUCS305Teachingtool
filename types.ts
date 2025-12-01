@@ -53,7 +53,8 @@ export enum AppModule {
   NFA_TO_DFA = 'NFA_TO_DFA',
   TM = 'TM',
   PNP = 'PNP',
-  CFG = 'CFG'
+  CFG = 'CFG',
+  SMT = 'SMT'
 }
 
 export enum PnpMode {
@@ -89,6 +90,13 @@ export interface ParseTreeNode {
   name: string; // The symbol
   children?: ParseTreeNode[];
   isTerminal: boolean;
+}
+
+export interface SmtConstraint {
+  id: string;
+  variable: string; // Usually 'x' for simplicity
+  type: 'gt' | 'lt' | 'eq';
+  value: number;
 }
 
 export interface Challenge {

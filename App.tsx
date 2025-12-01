@@ -1,14 +1,16 @@
 
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import DfaGraph from './components/DfaGraph';
 import SatVisualizer from './components/SatVisualizer';
 import CfgVisualizer from './components/CfgVisualizer';
+import SmtVisualizer from './components/SmtVisualizer';
 import ChatAssistant from './components/ChatAssistant';
 import EducationalContent from './components/EducationalContent';
 import ChallengePanel from './components/ChallengePanel';
 import LandingPage from './components/LandingPage';
-import { DfaConfig, AppTab, SimulationStep, Challenge, AppModule, Transition, DfaState, PnpMode, SatClause, CfgConfig, ParseTreeNode } from './types';
-import { Play, RotateCcw, SkipForward, Plus, Trash2, BookOpen, Calculator, MonitorPlay, Pause, Trophy, Home, GitFork, Layers, ArrowRightLeft, ArrowRight, Settings2, Database, HardDrive, Network, Check, X, Palette, Braces, Sparkles, Split, Wand2, Target, CheckCircle2, AlertCircle } from 'lucide-react';
+import { DfaConfig, AppTab, SimulationStep, Challenge, AppModule, Transition, DfaState, PnpMode, SatClause, CfgConfig, ParseTreeNode, SmtConstraint } from './types';
+import { Play, RotateCcw, SkipForward, Plus, Trash2, BookOpen, Calculator, MonitorPlay, Pause, Trophy, Home, GitFork, Layers, ArrowRightLeft, ArrowRight, Settings2, Database, HardDrive, Network, Check, X, Palette, Braces, Sparkles, Split, Wand2, Target, CheckCircle2, AlertCircle, Scale } from 'lucide-react';
 
 const INITIAL_DFA: DfaConfig = {
   states: [
@@ -115,6 +117,13 @@ const INITIAL_CFG: CfgConfig = {
     rawText: "S -> 0S1 | ε"
 };
 
+const INITIAL_SMT: SmtConstraint[] = [
+  { id: 'c1', variable: 'x', type: 'gt', value: 3 },
+  { id: 'c2', variable: 'x', type: 'lt', value: 8 },
+  { id: 'c3', variable: 'x', type: 'gt', value: 9 },
+  { id: 'c4', variable: 'x', type: 'eq', value: 5 },
+];
+
 // Presets for SAT
 const SAT_PRESETS = {
   EASY: {
@@ -147,6 +156,7 @@ const THEME_CLASSES: Record<AppModule, { header: string, icon: string, accent: s
     [AppModule.PNP]: { header: 'bg-indigo-900', icon: 'bg-indigo-500', accent: 'bg-indigo-600', light: 'bg-indigo-100', text: 'text-indigo-700', border: 'hover:border-indigo-200' },
     [AppModule.NFA_TO_DFA]: { header: 'bg-amber-900', icon: 'bg-amber-500', accent: 'bg-amber-600', light: 'bg-amber-100', text: 'text-amber-700', border: 'hover:border-amber-400' },
     [AppModule.CFG]: { header: 'bg-cyan-900', icon: 'bg-cyan-600', accent: 'bg-cyan-600', light: 'bg-cyan-100', text: 'text-cyan-700', border: 'hover:border-cyan-400' },
+    [AppModule.SMT]: { header: 'bg-fuchsia-900', icon: 'bg-fuchsia-600', accent: 'bg-fuchsia-600', light: 'bg-fuchsia-100', text: 'text-fuchsia-700', border: 'hover:border-fuchsia-400' },
 };
 
 const App: React.FC = () => {
@@ -162,6 +172,12 @@ const App: React.FC = () => {
   const [cfgConfig, setCfgConfig] = useState<CfgConfig>(INITIAL_CFG);
   const cfgTextareaRef = useRef<HTMLTextAreaElement>(null);
   
+  // SMT State
+  const [smtConstraints, setSmtConstraints] = useState<SmtConstraint[]>(INITIAL_SMT);
+  const [smtAssignments, setSmtAssignments] = useState<Record<string, boolean>>({});
+  const [newSmtType, setNewSmtType] = useState<'gt' | 'lt' | 'eq'>('gt');
+  const [newSmtValue, setNewSmtValue] = useState<string>('0');
+
   // PNP State
   const [pnpMode, setPnpMode] = useState<PnpMode>(PnpMode.GRAPH_COLORING);
   const [nodeColors, setNodeColors] = useState<Record<string, string>>({});
@@ -674,6 +690,27 @@ const App: React.FC = () => {
       setCurrentSimStates([]);
   };
 
+  // --- SMT Logic ---
+  const toggleSmtAssignment = (id: string) => {
+    setSmtAssignments(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
+  const addSmtConstraint = () => {
+    const val = parseInt(newSmtValue, 10);
+    if (isNaN(val)) return;
+    const newId = `c${smtConstraints.length + 1}`;
+    setSmtConstraints(prev => [...prev, {
+      id: newId,
+      variable: 'x',
+      type: newSmtType,
+      value: val
+    }]);
+    setSmtAssignments(prev => ({ ...prev, [newId]: true }));
+  };
+
   // --- Simulation Engine ---
   const stepSimulation = useCallback(() => {
     if (currentModule === AppModule.NFA_TO_DFA) return; 
@@ -875,6 +912,7 @@ const App: React.FC = () => {
         initCfgTree(cfgConfig.startVariable);
         setCfgDemoQueue([]);
     }
+    // No specific reset needed for SMT visualizer state as it's not time-based simulation
   };
 
   const handleStartModule = (module: AppModule) => {
@@ -961,10 +999,11 @@ const App: React.FC = () => {
                currentModule === AppModule.NFA ? <GitFork size={20}/> :
                currentModule === AppModule.PNP ? <Network size={20}/> :
                currentModule === AppModule.CFG ? <Split size={20}/> :
+               currentModule === AppModule.SMT ? <Scale size={20}/> :
                <Play size={20}/>}
             </div>
             <h1 className="text-lg font-bold tracking-tight hidden md:block">
-              {currentModule === AppModule.PDA ? 'Pushdown Automata' : (currentModule === AppModule.NFA ? 'NFA Visualizer' : (currentModule === AppModule.NFA_TO_DFA ? 'NFA → DFA' : (currentModule === AppModule.TM ? 'Turing Machine' : (currentModule === AppModule.PNP ? 'P vs NP' : (currentModule === AppModule.CFG ? 'Context-Free Grammar' : 'DFA Master')))))}
+              {currentModule === AppModule.PDA ? 'Pushdown Automata' : (currentModule === AppModule.NFA ? 'NFA Visualizer' : (currentModule === AppModule.NFA_TO_DFA ? 'NFA → DFA' : (currentModule === AppModule.TM ? 'Turing Machine' : (currentModule === AppModule.PNP ? 'P vs NP' : (currentModule === AppModule.CFG ? 'Context-Free Grammar' : (currentModule === AppModule.SMT ? 'SMT Solver' : 'DFA Master'))))))}
             </h1>
           </div>
         </div>
@@ -1041,7 +1080,7 @@ const App: React.FC = () => {
             <>
                 <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur p-3 rounded-lg shadow border border-slate-200">
                     <div className="flex items-center gap-3 mb-2">
-                    {currentModule !== AppModule.PNP && currentModule !== AppModule.CFG ? (
+                    {currentModule !== AppModule.PNP && currentModule !== AppModule.CFG && currentModule !== AppModule.SMT ? (
                         <span className={`px-2 py-1 rounded text-xs font-bold ${
                             simResult === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-700' :
                             simResult === 'REJECTED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'
@@ -1060,14 +1099,17 @@ const App: React.FC = () => {
                                 ? (verificationResult ? (verificationResult === 'valid' ? 'Valid Coloring' : 'Conflict Found') : 'Unverified') 
                                 : (isSatSolved ? 'Formula Satisfied!' : 'SAT Solver')}
                         </span>
-                        ) : (
+                        ) : currentModule === AppModule.CFG ? (
                            <span className={`px-2 py-1 rounded text-xs font-bold ${cfgTarget && cfgSentence.map(i=>i.val).join('') === cfgTarget ? 'bg-emerald-100 text-emerald-700' : 'bg-cyan-100 text-cyan-700'}`}>
                                {cfgTarget && cfgSentence.map(i=>i.val).join('') === cfgTarget ? 'Success!' : 'Derivation'}
                            </span>
+                        ) : (
+                           // SMT Status Badge
+                           <span className="px-2 py-1 rounded text-xs font-bold bg-fuchsia-100 text-fuchsia-700">Lazy SMT</span>
                         )
                     )}
                     
-                    {currentModule !== AppModule.PNP && currentModule !== AppModule.CFG && <span className="font-mono text-sm">State: <span className={`font-bold ${theme.text}`}>{currentSimStates.join(', ') || '∅'}</span></span>}
+                    {currentModule !== AppModule.PNP && currentModule !== AppModule.CFG && currentModule !== AppModule.SMT && <span className="font-mono text-sm">State: <span className={`font-bold ${theme.text}`}>{currentSimStates.join(', ') || '∅'}</span></span>}
                     </div>
 
                     {currentModule === AppModule.PDA && (
@@ -1099,7 +1141,7 @@ const App: React.FC = () => {
                         </div>
                     )}
 
-                    {simIndex >= 0 && currentModule !== AppModule.TM && currentModule !== AppModule.PNP && currentModule !== AppModule.CFG && (
+                    {simIndex >= 0 && currentModule !== AppModule.TM && currentModule !== AppModule.PNP && currentModule !== AppModule.CFG && currentModule !== AppModule.SMT && (
                     <div className="mt-2 font-mono text-lg bg-slate-100 p-2 rounded flex gap-1 justify-center max-w-[200px] overflow-x-auto">
                         {inputString.split('').map((c, i) => (
                         <span key={i} className={`w-6 text-center ${i === simIndex ? 'bg-yellow-400 font-bold' : i < simIndex ? 'text-slate-400' : 'text-slate-800'}`}>{c}</span>
@@ -1223,6 +1265,12 @@ const App: React.FC = () => {
                             </div>
                         </div>
                     </div>
+                ) : currentModule === AppModule.SMT ? (
+                    <SmtVisualizer 
+                        constraints={smtConstraints}
+                        assignments={smtAssignments}
+                        onToggleAssignment={toggleSmtAssignment}
+                    />
                 ) : (
                     <DfaGraph 
                         config={activeConfig} 
@@ -1235,7 +1283,8 @@ const App: React.FC = () => {
                 )}
                 
                 {/* Control Bar */}
-                {/* Always show Control Bar unless NFA_TO_DFA split view */}
+                {/* Always show Control Bar unless NFA_TO_DFA split view or SMT (which handles its own controls mostly) */}
+                {currentModule !== AppModule.SMT && (
                 <div className="h-20 bg-white border-t border-slate-200 flex items-center px-6 gap-4 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
                 
                 {currentModule === AppModule.PNP ? (
@@ -1289,6 +1338,7 @@ const App: React.FC = () => {
                 )}
                 
                 </div>
+                )}
             </>
           )}
         </div>
@@ -1322,7 +1372,7 @@ const App: React.FC = () => {
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="font-bold text-slate-800 flex items-center gap-2">
                                 <Settings2 size={18}/> 
-                                {isSplitView ? 'Editor' : `Edit ${currentModule === AppModule.PNP ? 'Graph' : (currentModule === AppModule.CFG ? 'Grammar' : currentModule)}`}
+                                {isSplitView ? 'Editor' : `Edit ${currentModule === AppModule.PNP ? 'Graph' : (currentModule === AppModule.CFG ? 'Grammar' : (currentModule === AppModule.SMT ? 'Constraints' : currentModule))}`}
                             </h2>
                         </div>
 
@@ -1363,7 +1413,7 @@ const App: React.FC = () => {
                         )}
                         
                         {/* Editor Controls for Automata/Graph */}
-                        {!(currentModule === AppModule.PNP && pnpMode === PnpMode.SAT) && currentModule !== AppModule.CFG && (
+                        {!(currentModule === AppModule.PNP && pnpMode === PnpMode.SAT) && currentModule !== AppModule.CFG && currentModule !== AppModule.SMT && (
                             <>
                             {currentModule === AppModule.PNP && pnpMode === PnpMode.GRAPH_COLORING && (
                                 <div className="mb-6 bg-indigo-50 p-3 rounded-lg border border-indigo-100">
@@ -1443,6 +1493,64 @@ const App: React.FC = () => {
                                 </div>
                             </div>
                             </>
+                        )}
+                        
+                        {/* SMT Editor */}
+                        {currentModule === AppModule.SMT && (
+                          <div className="space-y-4">
+                            <div className="bg-fuchsia-50 p-3 rounded-lg border border-fuchsia-100">
+                                <h3 className="text-xs font-bold text-fuchsia-800 uppercase mb-2">Add Constraint</h3>
+                                <div className="flex gap-2 mb-2 items-center">
+                                  <span className="font-mono font-bold text-slate-700">x</span>
+                                  <select 
+                                    value={newSmtType} 
+                                    onChange={(e) => setNewSmtType(e.target.value as any)}
+                                    className="p-1.5 border rounded text-sm bg-white"
+                                  >
+                                    <option value="gt">&gt;</option>
+                                    <option value="lt">&lt;</option>
+                                    <option value="eq">=</option>
+                                  </select>
+                                  <input 
+                                    type="number" 
+                                    value={newSmtValue} 
+                                    onChange={(e) => setNewSmtValue(e.target.value)} 
+                                    className="w-16 p-1.5 border rounded text-sm"
+                                  />
+                                  <button onClick={addSmtConstraint} className="p-1.5 bg-fuchsia-600 text-white rounded hover:bg-fuchsia-700">
+                                    <Plus size={16}/>
+                                  </button>
+                                </div>
+                            </div>
+                            
+                            <div>
+                              <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Active Constraints</h3>
+                              <div className="space-y-2 max-h-64 overflow-y-auto">
+                                {smtConstraints.map(c => (
+                                  <div key={c.id} className="flex items-center justify-between p-2 bg-white border border-slate-200 rounded text-sm group hover:border-fuchsia-300">
+                                    <div className="flex items-center gap-2">
+                                      <input 
+                                        type="checkbox" 
+                                        checked={!!smtAssignments[c.id]} 
+                                        onChange={() => toggleSmtAssignment(c.id)}
+                                        className="accent-fuchsia-600"
+                                      />
+                                      <span className="font-mono">{c.variable} {c.type === 'gt' ? '>' : c.type === 'lt' ? '<' : '='} {c.value}</span>
+                                    </div>
+                                    <button 
+                                      onClick={() => {
+                                        setSmtConstraints(prev => prev.filter(p => p.id !== c.id));
+                                        setSmtAssignments(prev => { const n = {...prev}; delete n[c.id]; return n; });
+                                      }}
+                                      className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                      <Trash2 size={14}/>
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
                         )}
                         
                         {/* CFG Editor */}
