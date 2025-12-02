@@ -1,7 +1,7 @@
 
 
 import React from 'react';
-import { ArrowRight, Binary, GitFork, School, Layers, ArrowRightLeft, HardDrive, Network, Split, Scale } from 'lucide-react';
+import { ArrowRight, Binary, GitFork, School, Layers, ArrowRightLeft, HardDrive, Network, Split, Scale, ClipboardList } from 'lucide-react';
 import { AppModule } from '../types';
 
 interface Props {
@@ -204,8 +204,24 @@ const LandingPage: React.FC<Props> = ({ onStart }) => {
         </div>
 
       </div>
+
+      {/* Student Survey Section */}
+      <div className="mt-16 text-center animate-fadeIn">
+         <a 
+           href="https://docs.google.com/forms/d/e/1FAIpQLScW-fWdXjSBnHZ2SQ4SMO_ImDIqP49DeHr9jckEzwgD1eMKdw/viewform?usp=sharing&ouid=113013872270547245854" 
+           target="_blank" 
+           rel="noopener noreferrer"
+           className="inline-flex items-center gap-2 px-8 py-4 bg-slate-900 text-white rounded-full font-bold shadow-xl hover:bg-blue-600 hover:scale-105 transition-all active:scale-95"
+         >
+           <ClipboardList size={20} />
+           Take Student Survey
+         </a>
+         <p className="text-slate-400 text-xs mt-3 font-medium">
+           Finished playing? We'd love your feedback!
+         </p>
+      </div>
       
-      <footer className="mt-24 text-slate-400 text-xs font-medium uppercase tracking-wider">
+      <footer className="mt-12 text-slate-400 text-xs font-medium uppercase tracking-wider">
         © {new Date().getFullYear()} Monmouth University • Computer Science Department
       </footer>
     </div>
